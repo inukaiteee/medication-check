@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f3f0">
+  <meta name="description" content="今日と昨日の、朝・昼・夕の服薬チェック。">
+  <title>服薬チェック</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <!--
+    アプリ本体はこのファイル1枚です。外部ライブラリ・ビルドは不要です。
+    GitHub Pagesには index.html と、アイコン用の次の4ファイルを同じ場所に置きます。
+    manifest.webmanifest / favicon.png / icon-192.png / icon-512.png
+    見た目は下の style、動作は末尾の script を編集してください。
+    記録は同じURL・同じ端末のブラウザ内だけに保存されます。
+    ブラウザのデータを消すと記録も消えます。端末間の同期はありません。
+  -->
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f3f3f0;
+      --ink: #202624;
+      --muted: #676e68;
+      --line: #d9ddd7;
+      --selected: #eaf0e9;
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-tap-highlight-color: transparent;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; }
+    main {
+      width: min(100%, 552px);
+      margin: 0 auto;
+      padding: 64px 24px 28px;
+      padding-bottom: max(28px, env(safe-area-inset-bottom));
+    }
+    .intro { margin-bottom: 32px; }
+    h1 { margin: 0; font-size: 28px; font-weight: 750; line-height: 1.5; letter-spacing: .055em; }
+    .day { padding: 23px; margin-top: 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+    .day:first-of-type { border-top: 3px solid var(--ink); padding-top: 21px; }
+    .day-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    .day-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 12px; }
+    h2 { font-size: 19px; font-weight: 700; margin: 0; line-height: 1.5; letter-spacing: .04em; }
+    time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .check { position: relative; display: block; min-width: 0; cursor: pointer; touch-action: manipulation; }
+    .check input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .tile { display: flex; flex-direction: column; align-items: center; padding: 17px 4px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fafbf9; transition: background-color .15s, border-color .15s; }
+    .period { font-size: 24px; line-height: 1.3; font-weight: 650; }
+    .box { display: grid; place-items: center; width: 32px; height: 32px; margin: 13px 0 3px; border: 1.5px solid #949e93; border-radius: 7px; background: #fff; color: #fff; }
+    .box svg { width: 21px; height: 21px; opacity: 0; }
+    .check input:checked + .tile { background: var(--selected); border-color: #a7b8a5; }
+    .check input:checked + .tile .box { border-color: var(--ink); background: var(--ink); }
+    .check input:checked + .tile .box svg { opacity: 1; }
+    .check input:focus-visible + .tile { outline: 3px solid #526c82; outline-offset: 3px; }
+    .check input:disabled { cursor: not-allowed; }
+    .check input:disabled + .tile { opacity: .5; }
+    .unavailable .box { border-style: dashed; color: var(--muted); }
+    .unavailable .box svg { display: none; }
+    .unavailable .box::after { content: '—'; font-size: 20px; line-height: 1; }
+    .yesterday { background: #f9faf7; }
+    .yesterday .tile { background: #fff; }
+    .yesterday .day-header { margin-bottom: 16px; }
+    .yesterday .tile { padding-top: 14px; padding-bottom: 12px; }
+    .yesterday .period { font-size: 21px; }
+    .yesterday .box { margin-top: 10px; margin-bottom: 3px; }
+    .notice { margin: 0 0 16px; padding: 14px; border: 1px solid #cfc0a8; border-radius: 8px; color: #654518; background: #fff8e9; font-size: 13px; line-height: 1.7; }
+    .notice strong { display: block; font-size: 15px; }
+    .notice p { margin: 6px 0 0; white-space: pre-line; }
+    .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .notice button { min-height: 44px; padding: 8px 14px; border: 1px solid #b9aa92; border-radius: 6px; color: #493923; background: #fff; font: inherit; cursor: pointer; touch-action: manipulation; }
+    .notice button:focus-visible { outline: 3px solid #526c82; outline-offset: 3px; }
+    .notice .confirm-reset { background: var(--ink); color: #fff; border-color: var(--ink); }
+    @media (max-width: 480px) {
+      main { padding: 32px 20px 24px; }
+      .intro { margin-bottom: 26px; }
+      .day { padding: 19px 16px; }
+      .day:first-of-type { padding-top: 17px; }
+      .day-title { gap: 5px 9px; }
+    }
+    @media (max-width: 350px) {
+      main { padding-left: 12px; padding-right: 12px; }
+      .checks { gap: 7px; }
+      .day { padding-left: 12px; padding-right: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .tile { transition: none; } }
+    @media (forced-colors: active) {
+      .check input:checked + .tile .box { background: Highlight; color: HighlightText; }
+      .check input:checked + .tile .box svg { forced-color-adjust: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="intro">
+      <h1>服薬チェック</h1>
+    </header>
+
+    <div class="notice" id="notice" hidden>
+      <div role="status" aria-live="polite" aria-atomic="true">
+        <strong id="notice-title"></strong>
+        <p id="notice-text"></p>
+      </div>
+      <div class="notice-actions">
+        <button type="button" id="retry" hidden>再確認</button>
+        <button type="button" id="reset" hidden>記録を初期化</button>
+        <button type="button" id="confirm-reset" class="confirm-reset" hidden>初期化する</button>
+        <button type="button" id="cancel-reset" hidden>戻る</button>
+        <button type="button" id="dismiss-notice" hidden>閉じる</button>
+      </div>
+    </div>
+    <noscript><p class="notice">記録を確認できません。ブラウザのJavaScriptを有効にして、ページを開き直してください。「—」は記録が不明な状態です。</p></noscript>
+
+    <section class="day unavailable" aria-labelledby="today-title" data-day="0">
+      <div class="day-header">
+        <div class="day-title"><h2 id="today-title">今日</h2><time></time></div>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" aria-label="今日の朝（記録不明）" disabled><span class="tile"><span class="period">朝</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+        <label class="check"><input type="checkbox" aria-label="今日の昼（記録不明）" disabled><span class="tile"><span class="period">昼</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+        <label class="check"><input type="checkbox" aria-label="今日の夕（記録不明）" disabled><span class="tile"><span class="period">夕</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+      </div>
+    </section>
+
+    <section class="day yesterday unavailable" aria-labelledby="yesterday-title" data-day="1">
+      <div class="day-header">
+        <div class="day-title"><h2 id="yesterday-title">昨日</h2><time></time></div>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" aria-label="昨日の朝（記録不明）" disabled><span class="tile"><span class="period">朝</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+        <label class="check"><input type="checkbox" aria-label="昨日の昼（記録不明）" disabled><span class="tile"><span class="period">昼</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+        <label class="check"><input type="checkbox" aria-label="昨日の夕（記録不明）" disabled><span class="tile"><span class="period">夕</span><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></label>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    'use strict';
+
+    // 保存形式は以前と同じです。名前を変えると以前の記録を引き継げません。
+    const STORAGE_KEY = 'daily-medication-check.v1';
+    const sections = [...document.querySelectorAll('[data-day]')];
+    const notice = document.getElementById('notice');
+    const noticeTitle = document.getElementById('notice-title');
+    const noticeText = document.getElementById('notice-text');
+    const buttons = Object.fromEntries(['retry', 'reset', 'confirm-reset', 'cancel-reset', 'dismiss-notice'].map(id => [id, document.getElementById(id)]));
+    let records = {};
+    let midnightTimer;
+    let currentError = null;
+    let resetSnapshot;
+    let infoDate = null;
+
+    function dateKey(date) {
+      const pad = number => String(number).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    }
+
+    // 使っている端末の日付を使います。
+    function currentDates() {
+      const now = new Date();
+      return [0, 1].map(offset => new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset));
+    }
+
+    function failure(phase, cause, raw) {
+      return { phase, cause, raw };
+    }
+
+    function readRaw() {
+      try { return localStorage.getItem(STORAGE_KEY); }
+      catch (cause) { throw failure('read', cause); }
+    }
+
+    function readRecords(dates) {
+      const raw = readRaw();
+      let saved;
+      try { saved = raw === null ? {} : JSON.parse(raw); }
+      catch (cause) { throw failure('corrupt', cause, raw); }
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw failure('corrupt', null, raw);
+      const next = {};
+      dates.forEach(date => {
+        const key = dateKey(date);
+        const value = saved[key];
+        if (value !== undefined && (!Array.isArray(value) || value.length !== 3 || !value.every(item => typeof item === 'boolean'))) {
+          throw failure('corrupt', null, raw);
+        }
+        next[key] = value === undefined ? [false, false, false] : [...value];
+      });
+      return { next, raw };
+    }
+
+    function saveRecords(next) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
+      catch (cause) { throw failure('write', cause); }
+      records = next;
+    }
+
+    function render(dates, { disabled = false, unknown = false } = {}) {
+      sections.forEach((section, dayIndex) => {
+        const date = dates[dayIndex];
+        const key = dateKey(date);
+        const values = records[key] || [false, false, false];
+        section.dataset.date = key;
+        section.classList.toggle('unavailable', unknown);
+        const time = section.querySelector('time');
+        time.dateTime = key;
+        time.textContent = `${date.getMonth() + 1}月${date.getDate()}日（${'日月火水木金土'[date.getDay()]}）`;
+        section.querySelectorAll('input').forEach((input, index) => {
+          input.checked = unknown ? false : values[index];
+          input.disabled = disabled;
+          input.setAttribute('aria-label', `${dayIndex ? '昨日' : '今日'}の${['朝', '昼', '夕'][index]}${unknown ? '（記録不明）' : ''}`);
+        });
+      });
+    }
+
+    function showNotice(title, text, actions) {
+      noticeTitle.textContent = title;
+      noticeText.textContent = text;
+      Object.entries(buttons).forEach(([id, button]) => { button.hidden = !actions.includes(id); });
+      notice.hidden = false;
+    }
+
+    function clearNotice() {
+      currentError = null;
+      resetSnapshot = undefined;
+      infoDate = null;
+      notice.hidden = true;
+      noticeTitle.textContent = '';
+      noticeText.textContent = '';
+      Object.values(buttons).forEach(button => { button.hidden = true; });
+    }
+
+    function showInfo(title, text) {
+      clearNotice();
+      infoDate = dateKey(currentDates()[0]);
+      showNotice(title, text, ['dismiss-notice']);
+    }
+
+    function showStorageError(error, dates, known = null, attemptedChange = false) {
+      currentError = error;
+      resetSnapshot = undefined;
+      infoDate = null;
+      records = known || {};
+      render(dates, { disabled: true, unknown: known === null });
+      let detail;
+      const name = error.cause?.name;
+      if (error.phase === 'corrupt') {
+        detail = '保存された記録の形式が壊れているため、内容を確認できません。再確認しても直らない場合は、記録を初期化してやり直せます。';
+      } else if (name === 'SecurityError') {
+        detail = `このブラウザでは記録の${error.phase === 'write' ? '保存' : '読み込み'}が許可されていません。サイトの保存設定を確認してから「再確認」を押してください。`;
+      } else if (name === 'QuotaExceededError') {
+        detail = '保存領域が足りないか、ブラウザが保存を制限しています。空き容量やサイトの保存設定を確認してから「再確認」を押してください。';
+      } else {
+        detail = 'ブラウザの保存領域にアクセスできませんでした。「再確認」を押してください。直らない場合は、ページを開き直してください。';
+      }
+      if (known === null) detail += '\n「—」は記録を確認できない状態です。';
+      else if (attemptedChange) detail = '今回の変更は保存していません。表示は変更前の記録です。\n' + detail;
+      const title = error.phase === 'write' ? (attemptedChange ? '変更を保存できませんでした' : '記録を保存できません') : '記録を確認できません';
+      showNotice(title, detail, error.phase === 'corrupt' ? ['retry', 'reset'] : ['retry']);
+    }
+
+    function scheduleMidnight() {
+      clearTimeout(midnightTimer);
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      midnightTimer = setTimeout(refresh, next.getTime() - now.getTime() + 100);
+    }
+
+    function refresh(forceWrite = false) {
+      const dates = currentDates();
+      let known = null;
+      try {
+        const { next, raw } = readRecords(dates);
+        known = next;
+        // 保存エラーからの復旧時は、読めるだけでなく保存できることも確認します。
+        if (forceWrite === true || currentError?.phase === 'write' || raw !== JSON.stringify(next)) saveRecords(next);
+        else records = next;
+        render(dates);
+        if (currentError || (infoDate && infoDate !== dateKey(dates[0]))) clearNotice();
+      } catch (error) {
+        showStorageError(error, dates, known);
+      }
+      scheduleMidnight();
+      return currentError === null;
+    }
+
+    function focusFirstCheck() {
+      sections[0].querySelector('input').focus({ preventScroll: true });
+    }
+
+    sections.forEach((section, dayIndex) => {
+      section.querySelectorAll('input').forEach((input, index) => {
+        input.addEventListener('change', () => {
+          const dates = currentDates();
+          const key = dateKey(dates[dayIndex]);
+          if (section.dataset.date !== key) {
+            if (refresh()) showInfo('日付が変わりました', 'この操作は保存していません。日付を確認して、もう一度チェックしてください。');
+            notice.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          let known = null;
+          try {
+            const { next } = readRecords(dates);
+            known = Object.fromEntries(Object.entries(next).map(([date, values]) => [date, [...values]]));
+            next[key][index] = input.checked;
+            saveRecords(next);
+            render(dates);
+            clearNotice();
+          } catch (error) {
+            showStorageError(error, dates, known, true);
+            notice.scrollIntoView({ block: 'nearest' });
+          }
+        });
+      });
+    });
+
+    buttons.retry.addEventListener('click', () => { if (refresh(true)) focusFirstCheck(); });
+    buttons['dismiss-notice'].addEventListener('click', () => { clearNotice(); focusFirstCheck(); });
+    buttons.reset.addEventListener('click', () => {
+      if (currentError?.phase !== 'corrupt') return;
+      resetSnapshot = currentError.raw;
+      showNotice('記録を初期化しますか？', 'このブラウザに保存した服薬記録を消し、今日・昨日を空欄に戻します。元には戻せません。', ['confirm-reset', 'cancel-reset']);
+      buttons['cancel-reset'].focus({ preventScroll: true });
+    });
+    buttons['cancel-reset'].addEventListener('click', () => { refresh(); if (currentError) buttons.retry.focus({ preventScroll: true }); });
+    buttons['confirm-reset'].addEventListener('click', () => {
+      if (resetSnapshot === undefined || currentError?.phase !== 'corrupt') return;
+      const dates = currentDates();
+      try {
+        // 確認中に別のタブで記録が直った・変わった場合は、初期化しません。
+        if (readRaw() !== resetSnapshot) {
+          if (refresh()) showInfo('記録が更新されました', '初期化せず、最新の記録を表示しました。');
+          return;
+        }
+        const empty = Object.fromEntries(dates.map(date => [dateKey(date), [false, false, false]]));
+        saveRecords(empty);
+        render(dates);
+        showInfo('記録を初期化しました', '必要なチェックを入れ直してください。');
+        focusFirstCheck();
+      } catch (error) {
+        showStorageError(error, dates);
+        noticeTitle.textContent = '記録を初期化できませんでした';
+        noticeText.textContent = '元の記録は変更していません。\n' + noticeText.textContent;
+      }
+    });
+
+    // 日付の案内は通常の復帰だけでは消さず、確認または次の操作まで残します。
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    window.addEventListener('focus', () => refresh());
+    window.addEventListener('pageshow', () => refresh());
+    window.addEventListener('storage', event => { if (event.key === STORAGE_KEY || event.key === null) refresh(); });
+    refresh();
+  </script>
+</body>
+</html>
